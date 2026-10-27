@@ -47,7 +47,7 @@
   <body>
     <div class="card">
       <h1>Managed App Deployment Tool</h1>
-      <p>Sign in, pick a source environment and app, pick a target environment, then click <b>Move App</b>. Environments and apps are pulled live from your Power Platform tenant.</p>
+      <p>Sign in, pick a source environment and app, pick a target environment, then click <b>Deploy App</b>. Environments and apps are pulled live from your Power Platform tenant.</p>
 
       <div class="row">
         <button id="loginBtn">Sign in</button>
@@ -83,7 +83,7 @@
 
       <div id="reqList"></div>
       <div class="row" id="moveRow" style="display:none;">
-        <button id="moveBtn">Move App</button>
+        <button id="moveBtn">Deploy App</button>
       </div>
       <div id="moveStatus" class="status"></div>
     </div>
@@ -95,7 +95,7 @@
         <span id="progressBadge" class="badge"></span>
         <span id="progressSummary"></span>
       </div>
-      <div id="progressEmpty" style="color:#6b7280;">No move in progress yet. Pick a source app and target environment, then click Move App.</div>
+      <div id="progressEmpty" style="color:#6b7280;">No move in progress yet. Pick a source app and target environment, then click Deploy App.</div>
       <pre id="progressLog" style="display:none;"></pre>
     </div>
 
@@ -182,7 +182,7 @@
         }
 
         moveBtnEl.disabled = isActive;
-        moveBtnEl.textContent = isActive ? "Move in progress..." : "Move App";
+        moveBtnEl.textContent = isActive ? "Move in progress..." : "Deploy App";
       }
 
       function stopPolling() {
@@ -216,7 +216,7 @@
             stopPolling();
             setStatus(moveStatusEl, error.message, true);
             moveBtnEl.disabled = false;
-            moveBtnEl.textContent = "Move App";
+            moveBtnEl.textContent = "Deploy App";
           }
         };
 
@@ -514,7 +514,7 @@
         } catch (error) {
           setStatus(moveStatusEl, error.message, true);
           moveBtnEl.disabled = false;
-          moveBtnEl.textContent = "Move App";
+          moveBtnEl.textContent = "Deploy App";
         }
       });
 

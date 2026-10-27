@@ -3,7 +3,7 @@
 A local web tool for replicating a Microsoft Copilot Managed Runtime app from one Power Platform environment to another — including its Dataverse solution and connector wiring — through a one-click UI backed by a small API + background worker.
 
 - **Live data** — source/target environments and managed apps are pulled dynamically from your actual Power Platform tenant via the `pac` and `ms` CLIs, not hardcoded config.
-- **One-click move flow** — pick a source environment, pick a managed app, pick a target environment, click **Move App**.
+- **One-click move flow** — pick a source environment, pick a managed app, pick a target environment, click **Deploy App**.
 - **Requirements detection** — before moving, inspect what the app's `ms.config.json` actually needs (Dataverse tables, SharePoint/other connector connections) and let you choose a solution and/or connections to set up in the target.
 - **Live progress** — the UI polls and streams the move's log in real time instead of leaving you guessing.
 - **Mock mode by default** for the deploy step, so you can exercise the whole flow safely before enabling real moves.
@@ -105,16 +105,21 @@ Open **http://localhost:7071/** in your browser.
 5. **Click "Check Requirements"** — clones the source app and inspects its `ms.config.json` for connector/Dataverse requirements:
    - **Dataverse requirement**: lists every custom solution available in the source environment so you can pick which one to bring along (or skip, if the tables already exist in the target). This is a user choice, not an auto-guess — the tool cannot reliably infer which solution "owns" a given table from `ms.config.json` alone.
    - **Non-Dataverse requirement** (SharePoint, SQL, Office 365, etc.): no solution concept applies — just a checkbox for whether to wire up a connection in the target.
-6. **Click "Move App"** — submits the move; the worker picks it up and the UI streams live progress.
+6. **Click "Deploy App"** — submits the move; the worker picks it up and the UI streams live progress.
 
 ### What actually happens during a move
 
-1. Clone the source app's code (`ms app clone`).
-2. Check whether a target app for this (source app, target environment) pair already exists (by display name, or from a locally cached mapping) — reused instead of creating a duplicate on repeat moves.
-3. If a Dataverse solution was selected and isn't already installed in the target: export it (managed) from the source environment and import it (`pac solution export` / `pac solution import`).
-4. For each approved connection: wire it up in the target app's working copy (`ms app add data-source ... --use-sso`), which updates `ms.config.json` and regenerates the typed service code.
-5. Commit the result as a fresh root commit and push it (see **Why force-push** below).
-6. `ms app deploy` builds and goes live in the target environment.
+1. Clone the source app's code (`ms app clone`), if not already cloned during the requirements check.
+2. Check whether a target app for this (source app, target environment) pair already exists — via a locally cached mapping from a prior move, or by searching the target environment's apps by display name (`ms app list`). This avoids registering a duplicate app on repeat moves.
+3. **If reusing an existing target app**: re-clone its working copy (`ms app clone`), and if its `ms.config.json` is missing/incomplete, reconstruct it from the app's live registration details (`ms app info`).
+   **If no target app exists yet**: register a brand-new one (`ms app init --repo native`), then read back its generated app ID (`ms app info --json`).
+4. Copy the source app's code into the target working copy.
+5. If a Dataverse solution was selected and isn't already installed in the target (checked via `pac solution list`): export it (managed) from the source environment and import it (`pac solution export` / `pac solution import`). If the import command itself reports an error, re-check `pac solution list` directly before concluding it actually failed — a dropped connection can fail the CLI call while the import completes server-side anyway.
+6. For each approved connection: confirm it doesn't already exist (`pac connection list`), then wire it up in the target app's working copy (`ms app add data-source ... --use-sso`), which updates `ms.config.json` and regenerates the typed service code.
+7. Commit the result and push it. This isn't a plain `git commit`/`git push` — to avoid the git corruption and credential-loss failure modes described below, the tool re-clones a disposable scratch copy of the same app (`ms app clone`), swaps its healthy `.git` directory into the target working copy, creates a fresh orphan commit (`git checkout --orphan` → `git add -A` → `git commit`), and force-pushes it (`git push -f`) — replacing the app's git history each time rather than trying to merge.
+8. `ms app deploy` builds and goes live in the target environment.
+
+All `pac` calls are preceded by a one-time, cached check that a `pac` profile is already signed in (`pac auth list`) — the tool never creates new named profiles per environment, since that can hang indefinitely waiting on an invisible sign-in prompt.
 
 ## 6) Configuration reference
 
@@ -138,9 +143,9 @@ Open **http://localhost:7071/** in your browser.
 |---|---|
 | `GET /live/environments` | Environments the signed-in account can access (live via `pac admin list`) |
 | `GET /live/apps?environmentId=...` | Managed apps in that environment (live via `ms app list`) |
-| `GET /requirements?sourceAppId=&sourceEnvironmentId=&targetEnvironmentId=` | Clone + inspect connector/Dataverse requirements, plus available solutions to pick from |
+| `GET /requirements?sourceAppId=&sourceEnvironmentId=&targetEnvironmentId=` | Clone + inspect connector/Dataverse requirements, plus available solutions to pick from. Under the hood: `ms app clone`, `pac auth list`, `pac connection list` (per connector), and (only if a Dataverse table is involved) `pac solution list` against both source and target. |
 | `GET /auth/status` / `POST /auth/login` | Wraps `ms auth status` / `ms auth login` |
-| `POST /promote-now` | One-shot move: auto-creates and auto-approves a request for the worker to execute |
+| `POST /promote-now` | One-shot move: auto-creates and auto-approves a request for the worker to execute. The worker then runs the full replicate pipeline — `ms app clone`, `ms app list`, `ms app init`/`ms app info` (new app) or re-`ms app clone` (existing app), `pac solution export`/`import`, `ms app add data-source`, a scratch-clone + orphan-commit + force-push `git` sequence, and finally `ms app deploy`. See "What actually happens during a move" above for the full sequence. |
 | `GET /requests` / `GET /requests/:id` | List/inspect move requests and their live logs |
 | `POST /requests/:id/approve` \| `/reject` \| `/cancel` | Manual request lifecycle (used by the legacy config-driven flow) |
 
