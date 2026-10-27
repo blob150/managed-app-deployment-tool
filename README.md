@@ -103,8 +103,8 @@ Open **http://localhost:7071/** in your browser.
 3. **Pick a Managed App** — populated live from `ms app list --environment-id <source>`, scoped to the environment you picked.
 4. **Pick a Target Environment.**
 5. **Click "Check Requirements"** — clones the source app and inspects its `ms.config.json` for connector/Dataverse requirements:
-   - **Dataverse requirement**: lists every custom solution available in the source environment so you can pick which one to bring along (or skip, if the tables already exist in the target). This is a user choice, not an auto-guess — the tool cannot reliably infer which solution "owns" a given table from `ms.config.json` alone.
-   - **Non-Dataverse requirement** (SharePoint, SQL, Office 365, etc.): no solution concept applies — just a checkbox for whether to wire up a connection in the target.
+   - **Dataverse Solution picker (always shown)**: every custom solution available in the source environment, so you can optionally bring one along to the target — regardless of whether the app's connector requirements mention Dataverse tables at all. This is deliberately not gated on auto-detection: the tool can't see everything a solution might carry (Power Automate flows, plugins, other solution-packaged components), so the choice is always yours, not an auto-guess.
+   - **Per-connector connection checkboxes**: for each connector the app actually declares (Dataverse or otherwise — SharePoint, SQL, Office 365, etc.), a checkbox for whether to wire up a connection in the target.
 6. **Click "Deploy App"** — submits the move; the worker picks it up and the UI streams live progress.
 
 ### What actually happens during a move
@@ -160,6 +160,7 @@ If you move this tool to a machine where your home/profile folder is itself clou
 ## 9) Known limitations / backlog
 
 - **Single-operator, local tool today.** There is no multi-user auth model, and the API has no access control — it trusts whoever can reach `localhost:7071` on your machine. To share this with other people, either (a) have each person run their own local copy following this README, or (b) build a hosted multi-user version (API/worker on a shared server behind Entra auth) — not yet implemented.
+- **Solution import doesn't re-map the solution's own internal connection references.** If the solution you pick contains its own Dataverse "Connection Reference" components (used by Power Automate flows or canvas apps bundled in that solution), `pac solution import` is run without a `--settings-file`, so those references are left unbound after import — this tool only wires up a live connection for the *managed app itself* (via `ms app add data-source`), which is a separate mechanism. If the solution's other components need their own working connection, you'll need to map that manually afterward (maker portal, or a `pac solution import --settings-file`).
 - **Dataverse table creation without a solution** is not implemented. If an app needs Dataverse tables and you don't have (or don't want to use) a solution that contains them, the move will fail at the data-source wiring step. Creating tables directly via CLI/API instead of a solution is tracked as a future option.
 - **Solution picker lists the source environment's custom solutions only** — it does not validate that your chosen solution actually contains the tables the app needs; check the solution's contents if you're unsure.
 - **No automated tests.** Validate changes by running a move in mock mode, then a real move against a disposable/test environment pair.

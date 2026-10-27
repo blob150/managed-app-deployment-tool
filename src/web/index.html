@@ -75,9 +75,9 @@
       <h2 style="margin-top:0;">Requirements</h2>
       <p id="reqEmpty" style="color:#6b7280; margin:0;">Click <b>Check Requirements</b> after picking a source app and target environment to see what Dataverse tables and connections this app needs.</p>
 
-      <div id="solutionPickerBlock" style="display:none;">
+      <div id="solutionPickerBlock">
         <label>Dataverse Solution (from source environment) — optional</label>
-        <p class="req-sub" style="margin-top:2px;">This app needs Dataverse tables. Optionally pick the solution in the source environment that contains them — it will be installed in the target first. You can skip this if those tables already exist in the target, or to test the connection step on its own.</p>
+        <p class="req-sub" style="margin-top:2px;">Optionally install a solution from the source environment into the target before deploying — useful if this app needs Dataverse tables, or if the solution carries along other components (flows, plugins, etc.) this tool can't otherwise detect. Skip if nothing extra is needed.</p>
         <select id="solutionPicker"></select>
       </div>
 
@@ -116,7 +116,6 @@
       const checkReqStatusEl = document.getElementById("checkReqStatus");
       const reqEmptyEl = document.getElementById("reqEmpty");
       const reqListEl = document.getElementById("reqList");
-      const solutionPickerBlockEl = document.getElementById("solutionPickerBlock");
       const solutionPickerEl = document.getElementById("solutionPicker");
       const resultEl = document.getElementById("result");
       const progressHeaderEl = document.getElementById("progressHeader");
@@ -293,7 +292,6 @@
         requirementsReport = null;
         reqEmptyEl.style.display = "block";
         reqListEl.innerHTML = "";
-        solutionPickerBlockEl.style.display = "none";
         solutionPickerEl.innerHTML = "";
         moveRowEl.style.display = "none";
         setStatus(moveStatusEl, "");
@@ -324,11 +322,7 @@
       function renderRequirements(report, availableSolutions) {
         reqListEl.innerHTML = "";
 
-        const needsDataverseSchema = (report || []).some((entry) => entry.isDataverse && entry.tables.length > 0);
-        solutionPickerBlockEl.style.display = needsDataverseSchema ? "block" : "none";
-        if (needsDataverseSchema) {
-          renderSolutionPicker(availableSolutions);
-        }
+        renderSolutionPicker(availableSolutions);
 
         if (!report || report.length === 0) {
           reqEmptyEl.style.display = "block";

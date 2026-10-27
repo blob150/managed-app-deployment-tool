@@ -162,10 +162,14 @@ app.get("/requirements", async (req, res, next) => {
     const sourceDir = await cloneSource(sourceAppId, root, (line) => logLines.push(line));
 
     const report = await buildRequirementsReport(sourceDir, sourceEnvironmentId, targetEnvironmentId);
-    const needsDataverseSchema = report.some((entry) => entry.isDataverse && entry.tables.length > 0);
-    const availableSolutions = needsDataverseSchema
-      ? await listAvailableSolutions(sourceEnvironmentId, targetEnvironmentId)
-      : [];
+    // Always offer the solution picker, regardless of what the app's
+    // ms.config.json declares. Table-bound Dataverse requirements are the
+    // most common reason to pick a solution, but a user may also want to
+    // bring along a solution for components this tool can't detect at all
+    // (e.g. Power Automate flows, plugins, or other solution-packaged pieces
+    // that the connection requirements don't capture) — so this is always
+    // available, never gated on auto-detected requirements.
+    const availableSolutions = await listAvailableSolutions(sourceEnvironmentId, targetEnvironmentId);
 
     res.json({ requirements: report, availableSolutions });
   } catch (error) {
