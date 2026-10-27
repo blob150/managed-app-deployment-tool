@@ -1,0 +1,36 @@
+{
+  "auth": {
+    "enabled": true,
+    "loginCommand": "ms auth login",
+    "statusCommand": "ms auth status"
+  },
+  "environments": [
+    {
+      "id": "env-dev",
+      "displayName": "Dev Environment",
+      "role": "source"
+    },
+    {
+      "id": "env-prod",
+      "displayName": "Prod Environment",
+      "role": "target"
+    }
+  ],
+  "apps": [
+    {
+      "id": "managed-app-inventory-src",
+      "displayName": "Managed App Inventory [DEV]",
+      "environmentId": "env-dev",
+      "deploymentAppId": "managed-app-inventory"
+    }
+  ],
+  "targetMappings": [
+    {
+      "sourceAppId": "managed-app-inventory-src",
+      "targetEnvironmentId": "env-prod",
+      "appId": "managed-app-inventory",
+      "targetEnv": "prod"
+    }
+  ]
+}
+

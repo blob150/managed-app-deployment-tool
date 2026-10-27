@@ -1,0 +1,31 @@
+{
+  "apps": [
+    {
+      "id": "managed-app-inventory",
+      "displayName": "Managed App Inventory",
+      "mode": "mock",
+      "repoPath": "C:\\repos\\managed-app-inventory",
+      "environments": {
+        "dev": {
+          "branch": "dev",
+          "steps": [
+            "git fetch --all --prune",
+            "git checkout dev",
+            "git pull",
+            "npm run alm:deploy -- dev"
+          ]
+        },
+        "prod": {
+          "branch": "prod",
+          "steps": [
+            "git fetch --all --prune",
+            "git checkout prod",
+            "git pull",
+            "npm run alm:deploy -- prod"
+          ]
+        }
+      }
+    }
+  ]
+}
+

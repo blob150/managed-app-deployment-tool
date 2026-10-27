@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Managed App Deployment Tool</title>
+    <style>
+      body { font-family: Segoe UI, Arial, sans-serif; margin: 20px; color: #111827; background: #f8fafc; }
+      .card { max-width: 900px; border: 1px solid #d1d5db; border-radius: 10px; padding: 14px; background: #fff; margin-bottom: 14px; }
+      h1 { margin: 0 0 6px 0; }
+      p { color: #4b5563; margin-top: 0; }
+      label { display: block; margin-top: 10px; font-weight: 600; }
+      input, select, button { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 6px; }
+      .row { display: flex; gap: 8px; margin-top: 10px; }
+      .row > * { flex: 1; }
+      button { background: #2563eb; color: #fff; border: 0; font-weight: 600; cursor: pointer; }
+      button.secondary { background: #64748b; }
+      .status { margin-top: 10px; font-weight: 600; color: #1d4ed8; min-height: 22px; }
+      .error { color: #b91c1c; }
+      details { margin-top: 10px; }
+      summary { cursor: pointer; font-weight: 600; color: #4b5563; }
+      pre { white-space: pre-wrap; background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px; border-radius: 6px; max-height: 360px; overflow: auto; }
+      button:disabled { opacity: 0.6; cursor: not-allowed; }
+      .progress-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+      .spinner { width: 18px; height: 18px; border: 3px solid #cbd5e1; border-top-color: #2563eb; border-radius: 50%; animation: spin 0.8s linear infinite; flex: none; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; }
+      .badge-running { background: #dbeafe; color: #1d4ed8; }
+      .badge-requested, .badge-approved { background: #fef3c7; color: #92400e; }
+      .badge-succeeded { background: #dcfce7; color: #166534; }
+      .badge-failed { background: #fee2e2; color: #b91c1c; }
+      .badge-cancelled, .badge-rejected { background: #e5e7eb; color: #374151; }
+      #progressLog { font-family: Consolas, "Courier New", monospace; font-size: 12.5px; }
+      .log-line-error { color: #b91c1c; }
+      .req-item { border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin-top: 8px; }
+      .req-item.mandatory { background: #fffbeb; border-color: #fde68a; }
+      .req-title { font-weight: 700; }
+      .req-sub { color: #6b7280; font-size: 13px; margin-top: 2px; }
+      .req-tables { font-size: 12.5px; color: #374151; margin-top: 6px; }
+      .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+      .checkbox-row input[type="checkbox"] { width: auto; margin: 0; }
+      .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+      .pill-ok { background: #dcfce7; color: #166534; }
+      .pill-missing { background: #fee2e2; color: #b91c1c; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Managed App Deployment Tool</h1>
+      <p>Sign in, pick a source environment and app, pick a target environment, then click <b>Move App</b>. Environments and apps are pulled live from your Power Platform tenant.</p>
+
+      <div class="row">
+        <button id="loginBtn">Sign in</button>
+        <button id="statusBtn" class="secondary">Check Sign-in</button>
+      </div>
+      <div id="authStatus" class="status"></div>
+
+      <label>Source Environment</label>
+      <select id="sourceEnvironment"><option value="">Loading environments...</option></select>
+
+      <label>Managed App (from source environment)</label>
+      <select id="sourceApp"><option value="">Select a source environment first</option></select>
+
+      <label>Target Environment</label>
+      <select id="targetEnvironment"><option value="">Loading environments...</option></select>
+
+      <div class="row">
+        <button id="refreshBtn" class="secondary">Refresh Environments</button>
+        <button id="checkReqBtn" class="secondary">Check Requirements</button>
+      </div>
+      <div id="checkReqStatus" class="status"></div>
+
+      <details>
+        <summary>Advanced</summary>
+        <label>API Key (only needed if security.json requires one)</label>
+        <input id="apiKey" type="password" placeholder="Leave blank if disabled" />
+      </details>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Requirements</h2>
+      <p id="reqEmpty" style="color:#6b7280; margin:0;">Click <b>Check Requirements</b> after picking a source app and target environment to see what Dataverse tables and connections this app needs.</p>
+
+      <div id="solutionPickerBlock" style="display:none;">
+        <label>Dataverse Solution (from source environment) — optional</label>
+        <p class="req-sub" style="margin-top:2px;">This app needs Dataverse tables. Optionally pick the solution in the source environment that contains them — it will be installed in the target first. You can skip this if those tables already exist in the target, or to test the connection step on its own.</p>
+        <select id="solutionPicker"></select>
+      </div>
+
+      <div id="reqList"></div>
+      <div class="row" id="moveRow" style="display:none;">
+        <button id="moveBtn">Move App</button>
+      </div>
+      <div id="moveStatus" class="status"></div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Progress</h2>
+      <div id="progressHeader" class="progress-header" style="display:none;">
+        <div id="spinner" class="spinner"></div>
+        <span id="progressBadge" class="badge"></span>
+        <span id="progressSummary"></span>
+      </div>
+      <div id="progressEmpty" style="color:#6b7280;">No move in progress yet. Pick a source app and target environment, then click Move App.</div>
+      <pre id="progressLog" style="display:none;"></pre>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Latest Result</h2>
+      <pre id="result"></pre>
+    </div>
+
+    <script>
+      const apiKeyEl = document.getElementById("apiKey");
+      const authStatusEl = document.getElementById("authStatus");
+      const sourceEnvironmentEl = document.getElementById("sourceEnvironment");
+      const sourceAppEl = document.getElementById("sourceApp");
+      const targetEnvironmentEl = document.getElementById("targetEnvironment");
+      const moveStatusEl = document.getElementById("moveStatus");
+      const moveBtnEl = document.getElementById("moveBtn");
+      const moveRowEl = document.getElementById("moveRow");
+      const checkReqBtnEl = document.getElementById("checkReqBtn");
+      const checkReqStatusEl = document.getElementById("checkReqStatus");
+      const reqEmptyEl = document.getElementById("reqEmpty");
+      const reqListEl = document.getElementById("reqList");
+      const solutionPickerBlockEl = document.getElementById("solutionPickerBlock");
+      const solutionPickerEl = document.getElementById("solutionPicker");
+      const resultEl = document.getElementById("result");
+      const progressHeaderEl = document.getElementById("progressHeader");
+      const progressEmptyEl = document.getElementById("progressEmpty");
+      const progressBadgeEl = document.getElementById("progressBadge");
+      const progressSummaryEl = document.getElementById("progressSummary");
+      const progressLogEl = document.getElementById("progressLog");
+
+      let environments = [];
+      let pollTimer = null;
+      let lastLogCount = 0;
+      let requirementsReport = null;
+
+      function setStatus(el, message, isError = false) {
+        el.textContent = message || "";
+        el.classList.toggle("error", !!isError);
+      }
+
+      function headers() {
+        const h = { "Content-Type": "application/json" };
+        const apiKey = apiKeyEl.value.trim();
+        if (apiKey) {
+          h["x-api-key"] = apiKey;
+        }
+        return h;
+      }
+
+      async function api(url, options = {}) {
+        const response = await fetch(url, {
+          ...options,
+          headers: { ...headers(), ...(options.headers || {}) }
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(data.error || `HTTP ${response.status}`);
+        }
+        return data;
+      }
+
+      const ACTIVE_STATUSES = new Set(["requested", "approved", "running"]);
+      const STATUS_SUMMARY = {
+        requested: "Waiting to start...",
+        approved: "Starting move...",
+        running: "Move in progress...",
+        succeeded: "Move completed successfully.",
+        failed: "Move failed.",
+        rejected: "Move was rejected.",
+        cancelled: "Move was cancelled."
+      };
+
+      function renderProgress(request) {
+        progressEmptyEl.style.display = "none";
+        progressHeaderEl.style.display = "flex";
+        progressLogEl.style.display = "block";
+
+        const isActive = ACTIVE_STATUSES.has(request.status);
+        document.getElementById("spinner").style.display = isActive ? "block" : "none";
+
+        progressBadgeEl.textContent = request.status;
+        progressBadgeEl.className = `badge badge-${request.status}`;
+        progressSummaryEl.textContent = STATUS_SUMMARY[request.status] || request.status;
+
+        const logs = request.logs || [];
+        progressLogEl.textContent = logs.length ? logs.join("\n") : "Waiting for worker to pick up this request...";
+        if (logs.length !== lastLogCount) {
+          progressLogEl.scrollTop = progressLogEl.scrollHeight;
+          lastLogCount = logs.length;
+        }
+
+        moveBtnEl.disabled = isActive;
+        moveBtnEl.textContent = isActive ? "Move in progress..." : "Move App";
+      }
+
+      function stopPolling() {
+        if (pollTimer) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+        }
+      }
+
+      function startPolling(requestId) {
+        stopPolling();
+        lastLogCount = -1;
+
+        const poll = async () => {
+          try {
+            const request = await api(`/requests/${requestId}`);
+            renderProgress(request);
+
+            if (!ACTIVE_STATUSES.has(request.status)) {
+              stopPolling();
+              resultEl.textContent = JSON.stringify(request, null, 2);
+              setStatus(
+                moveStatusEl,
+                request.status === "succeeded"
+                  ? "Move completed successfully."
+                  : `Move ended with status: ${request.status}.`,
+                request.status !== "succeeded"
+              );
+            }
+          } catch (error) {
+            stopPolling();
+            setStatus(moveStatusEl, error.message, true);
+            moveBtnEl.disabled = false;
+            moveBtnEl.textContent = "Move App";
+          }
+        };
+
+        poll();
+        pollTimer = setInterval(poll, 2000);
+      }
+
+      function fillEnvironmentSelect(selectEl) {
+        selectEl.innerHTML = "";
+        if (environments.length === 0) {
+          const option = document.createElement("option");
+          option.value = "";
+          option.textContent = "No environments found";
+          selectEl.appendChild(option);
+          return;
+        }
+
+        environments.forEach((env) => {
+          const option = document.createElement("option");
+          option.value = env.id;
+          option.textContent = `${env.displayName} (${env.type || "Environment"})`;
+          option.dataset.displayName = env.displayName;
+          selectEl.appendChild(option);
+        });
+      }
+
+      async function loadEnvironments() {
+        setStatus(moveStatusEl, "Loading environments from your tenant...");
+        environments = (await api("/live/environments")).environments || [];
+        fillEnvironmentSelect(sourceEnvironmentEl);
+        fillEnvironmentSelect(targetEnvironmentEl);
+        setStatus(moveStatusEl, environments.length ? "" : "No environments found for your account.");
+        await loadSourceApps();
+      }
+
+      async function loadSourceApps() {
+        sourceAppEl.innerHTML = "";
+        const environmentId = sourceEnvironmentEl.value;
+        if (!environmentId) {
+          const option = document.createElement("option");
+          option.value = "";
+          option.textContent = "Select a source environment first";
+          sourceAppEl.appendChild(option);
+          return;
+        }
+
+        const loadingOption = document.createElement("option");
+        loadingOption.value = "";
+        loadingOption.textContent = "Loading managed apps...";
+        sourceAppEl.appendChild(loadingOption);
+
+        const response = await api(`/live/apps?environmentId=${encodeURIComponent(environmentId)}`);
+        const apps = response.apps || [];
+
+        sourceAppEl.innerHTML = "";
+        if (apps.length === 0) {
+          const empty = document.createElement("option");
+          empty.value = "";
+          empty.textContent = "No managed apps found in this environment";
+          sourceAppEl.appendChild(empty);
+          return;
+        }
+
+        apps.forEach((entry) => {
+          const appOption = document.createElement("option");
+          appOption.value = entry.id;
+          appOption.textContent = entry.displayName || entry.id;
+          appOption.dataset.displayName = entry.displayName || entry.id;
+          sourceAppEl.appendChild(appOption);
+        });
+      }
+
+      function resetRequirements() {
+        requirementsReport = null;
+        reqEmptyEl.style.display = "block";
+        reqListEl.innerHTML = "";
+        solutionPickerBlockEl.style.display = "none";
+        solutionPickerEl.innerHTML = "";
+        moveRowEl.style.display = "none";
+        setStatus(moveStatusEl, "");
+      }
+
+      function renderSolutionPicker(availableSolutions) {
+        solutionPickerEl.innerHTML = "";
+
+        const noneOption = document.createElement("option");
+        noneOption.value = "";
+        noneOption.textContent = "Don't install a solution (tables already exist in target, or skip for now)";
+        solutionPickerEl.appendChild(noneOption);
+
+        if (!availableSolutions || availableSolutions.length === 0) {
+          return;
+        }
+
+        availableSolutions.forEach((solution) => {
+          const option = document.createElement("option");
+          option.value = solution.uniqueName;
+          option.textContent = solution.installedInTarget
+            ? `${solution.friendlyName} (already installed in target)`
+            : solution.friendlyName;
+          solutionPickerEl.appendChild(option);
+        });
+      }
+
+      function renderRequirements(report, availableSolutions) {
+        reqListEl.innerHTML = "";
+
+        const needsDataverseSchema = (report || []).some((entry) => entry.isDataverse && entry.tables.length > 0);
+        solutionPickerBlockEl.style.display = needsDataverseSchema ? "block" : "none";
+        if (needsDataverseSchema) {
+          renderSolutionPicker(availableSolutions);
+        }
+
+        if (!report || report.length === 0) {
+          reqEmptyEl.style.display = "block";
+          reqEmptyEl.textContent = "This app doesn't declare any connector/Dataverse requirements in its ms.config.json.";
+          moveRowEl.style.display = "flex";
+          return;
+        }
+
+        reqEmptyEl.style.display = "none";
+
+        report.forEach((entry) => {
+          const container = document.createElement("div");
+          container.className = "req-item";
+
+          const title = document.createElement("div");
+          title.className = "req-title";
+          title.textContent = entry.displayName;
+          container.appendChild(title);
+
+          if (entry.tables && entry.tables.length > 0) {
+            const tablesLine = document.createElement("div");
+            tablesLine.className = "req-tables";
+            tablesLine.textContent = `Tables: ${entry.tables.join(", ")}`;
+            container.appendChild(tablesLine);
+          }
+
+          if (entry.isDataverse && entry.tables.length > 0) {
+            const noteLine = document.createElement("div");
+            noteLine.className = "req-sub";
+            noteLine.innerHTML = `<span class="pill pill-missing">Dataverse</span> These tables need to exist in the target environment — optionally pick the solution that contains them above, or skip if they're already there.`;
+            container.appendChild(noteLine);
+          } else {
+            const noteLine = document.createElement("div");
+            noteLine.className = "req-sub";
+            noteLine.innerHTML = `<span class="pill pill-ok">No solution needed</span> This connector doesn't use Dataverse schema — just a connection.`;
+            container.appendChild(noteLine);
+          }
+
+          const checkboxRow = document.createElement("div");
+          checkboxRow.className = "checkbox-row";
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.id = `req-${entry.id}`;
+          checkbox.dataset.reqId = entry.id;
+          checkbox.checked = !entry.connectionSatisfied;
+          const checkboxLabel = document.createElement("label");
+          checkboxLabel.htmlFor = checkbox.id;
+          checkboxLabel.style.margin = "0";
+          checkboxLabel.style.fontWeight = "normal";
+          checkboxLabel.textContent = entry.connectionSatisfied
+            ? "Connection already exists in target — rewire anyway (optional)"
+            : "Set up this connection in the target environment";
+          checkboxRow.appendChild(checkbox);
+          checkboxRow.appendChild(checkboxLabel);
+          container.appendChild(checkboxRow);
+
+          reqListEl.appendChild(container);
+        });
+
+        moveRowEl.style.display = "flex";
+      }
+
+      function collectRequirementSelections() {
+        if (!requirementsReport) {
+          return [];
+        }
+
+        return requirementsReport.map((entry) => {
+          const checkbox = document.getElementById(`req-${entry.id}`);
+          return {
+            id: entry.id,
+            approved: !!checkbox?.checked
+          };
+        });
+      }
+
+      document.getElementById("loginBtn").addEventListener("click", async () => {
+        setStatus(authStatusEl, "Launching sign-in...");
+        try {
+          const result = await api("/auth/login", { method: "POST", body: "{}" });
+          setStatus(authStatusEl, result.output || "Sign-in completed.");
+          await loadEnvironments();
+        } catch (error) {
+          setStatus(authStatusEl, error.message, true);
+        }
+      });
+
+      document.getElementById("statusBtn").addEventListener("click", async () => {
+        setStatus(authStatusEl, "Checking sign-in...");
+        try {
+          const result = await api("/auth/status");
+          setStatus(authStatusEl, result.output || result.message || "Status loaded.");
+        } catch (error) {
+          setStatus(authStatusEl, error.message, true);
+        }
+      });
+
+      document.getElementById("refreshBtn").addEventListener("click", async () => {
+        try {
+          await loadEnvironments();
+        } catch (error) {
+          setStatus(moveStatusEl, error.message, true);
+        }
+      });
+
+      sourceEnvironmentEl.addEventListener("change", async () => {
+        resetRequirements();
+        try {
+          await loadSourceApps();
+        } catch (error) {
+          setStatus(moveStatusEl, error.message, true);
+        }
+      });
+
+      sourceAppEl.addEventListener("change", resetRequirements);
+      targetEnvironmentEl.addEventListener("change", resetRequirements);
+
+      checkReqBtnEl.addEventListener("click", async () => {
+        setStatus(checkReqStatusEl, "");
+        if (!sourceEnvironmentEl.value || !sourceAppEl.value || !targetEnvironmentEl.value) {
+          setStatus(checkReqStatusEl, "Choose a source environment, a managed app, and a target environment first.", true);
+          return;
+        }
+
+        checkReqBtnEl.disabled = true;
+        checkReqBtnEl.textContent = "Checking requirements...";
+        setStatus(checkReqStatusEl, "Cloning source app and inspecting its connections (this can take a bit the first time)...");
+
+        try {
+          const params = new URLSearchParams({
+            sourceAppId: sourceAppEl.value,
+            sourceEnvironmentId: sourceEnvironmentEl.value,
+            targetEnvironmentId: targetEnvironmentEl.value
+          });
+          const response = await api(`/requirements?${params.toString()}`);
+          requirementsReport = response.requirements || [];
+          renderRequirements(requirementsReport, response.availableSolutions || []);
+          setStatus(checkReqStatusEl, "Requirements check complete.");
+        } catch (error) {
+          setStatus(checkReqStatusEl, error.message, true);
+        } finally {
+          checkReqBtnEl.disabled = false;
+          checkReqBtnEl.textContent = "Check Requirements";
+        }
+      });
+
+      document.getElementById("moveBtn").addEventListener("click", async () => {
+        setStatus(moveStatusEl, "Submitting move request...");
+        moveBtnEl.disabled = true;
+        moveBtnEl.textContent = "Submitting...";
+        try {
+          const sourceEnvOption = sourceEnvironmentEl.selectedOptions[0];
+          const sourceAppOption = sourceAppEl.selectedOptions[0];
+          const targetEnvOption = targetEnvironmentEl.selectedOptions[0];
+
+          if (!sourceEnvironmentEl.value || !sourceAppEl.value || !targetEnvironmentEl.value) {
+            throw new Error("Choose a source environment, a managed app, and a target environment.");
+          }
+
+          const payload = {
+            sourceEnvironmentId: sourceEnvironmentEl.value,
+            sourceEnvironmentName: sourceEnvOption?.dataset.displayName || sourceEnvironmentEl.value,
+            sourceAppId: sourceAppEl.value,
+            sourceAppName: sourceAppOption?.dataset.displayName || sourceAppEl.value,
+            targetEnvironmentId: targetEnvironmentEl.value,
+            targetEnvironmentName: targetEnvOption?.dataset.displayName || targetEnvironmentEl.value,
+            requestedBy: "interactive-user",
+            sourceRef: "",
+            notes: "Move triggered from UI",
+            requirementsReport,
+            requirementSelections: collectRequirementSelections(),
+            selectedSolutionUniqueName: solutionPickerEl.value || ""
+          };
+
+          localStorage.setItem("lastMoveRequestId", "");
+          const request = await api("/promote-now", {
+            method: "POST",
+            body: JSON.stringify(payload)
+          });
+          setStatus(moveStatusEl, `Move request submitted: ${request.id}`);
+          localStorage.setItem("lastMoveRequestId", request.id);
+          startPolling(request.id);
+        } catch (error) {
+          setStatus(moveStatusEl, error.message, true);
+          moveBtnEl.disabled = false;
+          moveBtnEl.textContent = "Move App";
+        }
+      });
+
+      (async () => {
+        try {
+          await loadEnvironments();
+          setStatus(authStatusEl, "Ready.");
+
+          const lastRequestId = localStorage.getItem("lastMoveRequestId");
+          if (lastRequestId) {
+            try {
+              const existing = await api(`/requests/${lastRequestId}`);
+              if (ACTIVE_STATUSES.has(existing.status) || existing.logs?.length) {
+                startPolling(lastRequestId);
+              }
+            } catch (error) {
+              // Previous request no longer retrievable; ignore and start fresh.
+            }
+          }
+        } catch (error) {
+          setStatus(authStatusEl, error.message, true);
+          resultEl.textContent = error.message;
+        }
+      })();
+    </script>
+  </body>
+</html>
+

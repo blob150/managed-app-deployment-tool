@@ -1,0 +1,11 @@
+{
+  "apiKey": "replace-with-long-random-string",
+  "requireApiKeyForRead": false,
+  "enforceUserLists": false,
+  "requestersAllowList": [
+    "release.requestor@contoso.com"
+  ],
+  "approversAllowList": [
+    "release.approver@contoso.com"
+  ]
+}
