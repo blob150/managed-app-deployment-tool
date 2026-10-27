@@ -66,7 +66,6 @@ The required permission level in each target environment is effectively **System
 git clone https://github.com/<you>/managed-app-deployment-tool.git
 cd managed-app-deployment-tool
 npm install
-Copy-Item .\config\security.example.json .\config\security.json
 Copy-Item .\config\deploy.example.json .\config\deploy.json
 Copy-Item .\config\apps.example.json .\config\apps.json
 Copy-Item .\config\catalog.example.json .\config\catalog.json
@@ -119,21 +118,6 @@ Open **http://localhost:7071/** in your browser.
 
 ## 6) Configuration reference
 
-### `config/security.json`
-
-```json
-{
-  "apiKey": "",
-  "requireApiKeyForRead": false,
-  "enforceUserLists": false,
-  "requestersAllowList": [],
-  "approversAllowList": []
-}
-```
-
-- `apiKey` — leave blank to disable the API key guard entirely (fine for local single-user use).
-- `enforceUserLists` — turn on to restrict who can submit/approve requests via `requestersAllowList` / `approversAllowList`.
-
 ### `config/deploy.json`
 
 ```json
@@ -170,7 +154,7 @@ If you move this tool to a machine where your home/profile folder is itself clou
 
 ## 9) Known limitations / backlog
 
-- **Single-operator, local tool today.** There is no multi-user auth model yet — `config/security.json`'s API key is optional and the UI has no login of its own. To actually share this with other people, either (a) have each person run their own local copy following this README, or (b) build the hosted multi-user version (API/worker on a shared server behind Entra auth) — not yet implemented.
+- **Single-operator, local tool today.** There is no multi-user auth model, and the API has no access control — it trusts whoever can reach `localhost:7071` on your machine. To share this with other people, either (a) have each person run their own local copy following this README, or (b) build a hosted multi-user version (API/worker on a shared server behind Entra auth) — not yet implemented.
 - **Dataverse table creation without a solution** is not implemented. If an app needs Dataverse tables and you don't have (or don't want to use) a solution that contains them, the move will fail at the data-source wiring step. Creating tables directly via CLI/API instead of a solution is tracked as a future option.
 - **Solution picker lists the source environment's custom solutions only** — it does not validate that your chosen solution actually contains the tables the app needs; check the solution's contents if you're unsure.
 - **No automated tests.** Validate changes by running a move in mock mode, then a real move against a disposable/test environment pair.

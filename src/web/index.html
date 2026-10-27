@@ -69,12 +69,6 @@
         <button id="checkReqBtn" class="secondary">Check Requirements</button>
       </div>
       <div id="checkReqStatus" class="status"></div>
-
-      <details>
-        <summary>Advanced</summary>
-        <label>API Key (only needed if security.json requires one)</label>
-        <input id="apiKey" type="password" placeholder="Leave blank if disabled" />
-      </details>
     </div>
 
     <div class="card">
@@ -111,7 +105,6 @@
     </div>
 
     <script>
-      const apiKeyEl = document.getElementById("apiKey");
       const authStatusEl = document.getElementById("authStatus");
       const sourceEnvironmentEl = document.getElementById("sourceEnvironment");
       const sourceAppEl = document.getElementById("sourceApp");
@@ -143,12 +136,7 @@
       }
 
       function headers() {
-        const h = { "Content-Type": "application/json" };
-        const apiKey = apiKeyEl.value.trim();
-        if (apiKey) {
-          h["x-api-key"] = apiKey;
-        }
-        return h;
+        return { "Content-Type": "application/json" };
       }
 
       async function api(url, options = {}) {

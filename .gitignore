@@ -3,6 +3,5 @@ data/requests.json
 data/app-mappings.json
 data/workspaces/
 config/apps.json
-config/security.json
 config/catalog.json
 config/deploy.json

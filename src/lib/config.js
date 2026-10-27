@@ -25,27 +25,6 @@ function loadAppsConfig() {
   return config;
 }
 
-function loadSecurityConfig() {
-  const filePath = path.join(getConfigDir(), "security.json");
-  const config = readJson(filePath, {
-    apiKey: "",
-    requireApiKeyForRead: false,
-    enforceUserLists: false,
-    requestersAllowList: [],
-    approversAllowList: []
-  });
-
-  if (!Array.isArray(config.requestersAllowList)) {
-    throw new Error("config/security.json requestersAllowList must be an array.");
-  }
-
-  if (!Array.isArray(config.approversAllowList)) {
-    throw new Error("config/security.json approversAllowList must be an array.");
-  }
-
-  return config;
-}
-
 function findAppById(appId) {
   const config = loadAppsConfig();
   return config.apps.find((app) => app.id === appId) || null;
@@ -84,7 +63,6 @@ function loadDeployConfig() {
 
 module.exports = {
   loadAppsConfig,
-  loadSecurityConfig,
   findAppById,
   findAppEnvironment,
   loadDeployConfig
