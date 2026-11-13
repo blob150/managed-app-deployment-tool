@@ -1,6 +1,7 @@
 const express = require("express");
 const path = require("path");
 const { spawn } = require("child_process");
+const { listIdentities, selectIdentity } = require("./lib/identity");
 const {
   loadAppsConfig
 } = require("./lib/config");
@@ -210,6 +211,37 @@ app.post("/auth/login", async (req, res, next) => {
       command: catalog.auth.loginCommand,
       output: result.stdout || result.stderr || "Login command completed."
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Lists every account currently cached by ms/pac, so the UI can show "who
+// am I operating as" and let the user pick one explicitly, instead of the
+// tool silently inheriting whatever happened to be globally active on the
+// machine (which drifts between unrelated terminals/tools and previously
+// caused confusing cross-tenant errors).
+app.get("/identity/list", (req, res, next) => {
+  try {
+    const identities = listIdentities();
+    res.json({ identities });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Activates the chosen account for BOTH ms and pac, so every subsequent
+// call in this session consistently operates as one identity.
+app.post("/identity/select", (req, res, next) => {
+  try {
+    const { email = "" } = req.body || {};
+    if (!email) {
+      res.status(400).json({ error: "email is required." });
+      return;
+    }
+
+    const result = selectIdentity(email);
+    res.json(result);
   } catch (error) {
     next(error);
   }

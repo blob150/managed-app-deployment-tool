@@ -50,10 +50,15 @@
       <p>Sign in, pick a source environment and app, pick a target environment, then click <b>Deploy App</b>. Environments and apps are pulled live from your Power Platform tenant.</p>
 
       <div class="row">
-        <button id="loginBtn">Sign in</button>
-        <button id="statusBtn" class="secondary">Check Sign-in</button>
+        <button id="loginBtn">Sign in (new account)</button>
+        <button id="statusBtn" class="secondary">Refresh Identities</button>
       </div>
       <div id="authStatus" class="status"></div>
+
+      <label>Operating Identity</label>
+      <p class="req-sub" style="margin-top:2px;">All environment/app/solution lookups and the deploy itself run as this account. Pick one cached below, or click "Sign in (new account)" if you need an account that isn't listed.</p>
+      <select id="identityPicker"><option value="">Loading identities...</option></select>
+      <div id="identityStatus" class="status"></div>
 
       <label>Source Environment</label>
       <select id="sourceEnvironment"><option value="">Loading environments...</option></select>
@@ -106,6 +111,8 @@
 
     <script>
       const authStatusEl = document.getElementById("authStatus");
+      const identityPickerEl = document.getElementById("identityPicker");
+      const identityStatusEl = document.getElementById("identityStatus");
       const sourceEnvironmentEl = document.getElementById("sourceEnvironment");
       const sourceAppEl = document.getElementById("sourceApp");
       const targetEnvironmentEl = document.getElementById("targetEnvironment");
@@ -240,6 +247,49 @@
           option.dataset.displayName = env.displayName;
           selectEl.appendChild(option);
         });
+      }
+
+      async function loadIdentities(preferredEmail) {
+        identityPickerEl.innerHTML = "";
+        setStatus(identityStatusEl, "Loading cached identities...");
+
+        const response = await api("/identity/list");
+        const identities = response.identities || [];
+
+        if (identities.length === 0) {
+          const empty = document.createElement("option");
+          empty.value = "";
+          empty.textContent = "No cached accounts found — click Sign in";
+          identityPickerEl.appendChild(empty);
+          setStatus(identityStatusEl, "No cached accounts. Click \"Sign in (new account)\" to add one.", true);
+          return;
+        }
+
+        identities.forEach((identity) => {
+          const option = document.createElement("option");
+          option.value = identity.email;
+          const flags = [];
+          if (identity.msActive && identity.pacActive) {
+            flags.push("active");
+          } else if (identity.msActive || identity.pacActive) {
+            flags.push("partially active");
+          }
+          if (!identity.hasMsAccount || !identity.hasPacProfile) {
+            flags.push("incomplete");
+          }
+          option.textContent = flags.length ? `${identity.email} (${flags.join(", ")})` : identity.email;
+          identityPickerEl.appendChild(option);
+        });
+
+        const fullyActive = identities.find((identity) => identity.msActive && identity.pacActive);
+        const toSelect = preferredEmail || fullyActive?.email || identities[0].email;
+        identityPickerEl.value = toSelect;
+
+        if (!fullyActive) {
+          setStatus(identityStatusEl, "ms and pac are currently active as DIFFERENT accounts — pick one below to make them consistent.", true);
+        } else {
+          setStatus(identityStatusEl, `Operating as ${fullyActive.email}.`);
+        }
       }
 
       async function loadEnvironments() {
@@ -404,6 +454,7 @@
         try {
           const result = await api("/auth/login", { method: "POST", body: "{}" });
           setStatus(authStatusEl, result.output || "Sign-in completed.");
+          await loadIdentities();
           await loadEnvironments();
         } catch (error) {
           setStatus(authStatusEl, error.message, true);
@@ -411,12 +462,28 @@
       });
 
       document.getElementById("statusBtn").addEventListener("click", async () => {
-        setStatus(authStatusEl, "Checking sign-in...");
         try {
-          const result = await api("/auth/status");
-          setStatus(authStatusEl, result.output || result.message || "Status loaded.");
+          await loadIdentities();
         } catch (error) {
-          setStatus(authStatusEl, error.message, true);
+          setStatus(identityStatusEl, error.message, true);
+        }
+      });
+
+      identityPickerEl.addEventListener("change", async () => {
+        const email = identityPickerEl.value;
+        if (!email) {
+          return;
+        }
+        setStatus(identityStatusEl, `Switching to ${email}...`);
+        try {
+          const result = await api("/identity/select", {
+            method: "POST",
+            body: JSON.stringify({ email })
+          });
+          setStatus(identityStatusEl, (result.messages || []).join(" "));
+          await loadEnvironments();
+        } catch (error) {
+          setStatus(identityStatusEl, error.message, true);
         }
       });
 
@@ -514,6 +581,7 @@
 
       (async () => {
         try {
+          await loadIdentities();
           await loadEnvironments();
           setStatus(authStatusEl, "Ready.");
 
