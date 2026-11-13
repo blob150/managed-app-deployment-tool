@@ -98,7 +98,9 @@ Open **http://localhost:7071/** in your browser.
 
 ## 5) Using the tool
 
-1. **Sign in** — click "Sign in" (runs `ms auth login`), or "Check Sign-in" to see cached accounts.
+1. **Pick an Operating Identity** — a dropdown of every account already cached by `ms`/`pac` on your machine, shown with its status (`active` if both CLIs are currently using it, `incomplete` if only one has it cached). Pick one explicitly before doing anything else. If the account you need isn't listed, click **"Sign in (new account)"** (runs `ms auth login`) and, if it's genuinely new to `pac` too, run `pac auth create --environment <any-id>` for it once from a terminal, then click **"Refresh Identities"**.
+
+   **Why this matters:** `pac` and `ms` each keep their own independent, machine-wide "active account" — shared with any other terminal or tool that uses those CLIs. Without explicitly picking an identity here, the tool silently inherits whatever was last left active, which can quietly drift to a different tenant than the one you intend and produce confusing errors (e.g. `pac` reporting "No Dataverse organization was found" for an environment ID that's perfectly valid — just not in the tenant `pac` happens to be authenticated against). Picking an identity here switches **both** CLIs together, so they can't silently disagree.
 2. **Pick a Source Environment** — populated live from `pac admin list`.
 3. **Pick a Managed App** — populated live from `ms app list --environment-id <source>`, scoped to the environment you picked.
 4. **Pick a Target Environment.**
@@ -145,6 +147,8 @@ All `pac` calls are preceded by a one-time, cached check that a `pac` profile is
 | `GET /live/apps?environmentId=...` | Managed apps in that environment (live via `ms app list`) |
 | `GET /requirements?sourceAppId=&sourceEnvironmentId=&targetEnvironmentId=` | Clone + inspect connector/Dataverse requirements, plus available solutions to pick from. Under the hood: `ms app clone`, `pac auth list`, `pac connection list` (per connector), and (only if a Dataverse table is involved) `pac solution list` against both source and target. |
 | `GET /auth/status` / `POST /auth/login` | Wraps `ms auth status` / `ms auth login` |
+| `GET /identity/list` | Lists every account cached by `ms` (`ms auth status`) and `pac` (`pac auth list`), merged by email, with per-CLI active/cached status |
+| `POST /identity/select` | Activates one chosen account for BOTH `ms` (`ms auth switch`) and `pac` (`pac auth select`) together |
 | `POST /promote-now` | One-shot move: auto-creates and auto-approves a request for the worker to execute. The worker then runs the full replicate pipeline — `ms app clone`, `ms app list`, `ms app init`/`ms app info` (new app) or re-`ms app clone` (existing app), `pac solution export`/`import`, `ms app add data-source`, a scratch-clone + orphan-commit + force-push `git` sequence, and finally `ms app deploy`. See "What actually happens during a move" above for the full sequence. |
 | `GET /requests` / `GET /requests/:id` | List/inspect move requests and their live logs |
 | `POST /requests/:id/approve` \| `/reject` \| `/cancel` | Manual request lifecycle (used by the legacy config-driven flow) |
